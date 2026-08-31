@@ -36,8 +36,7 @@ RUN \
     /tmp/mstream.tar.gz -C \
     /app/mstream/ --strip-components=1 && \
   cd /app/mstream && \
-  chown -R abc:abc ./ && \
-  su -s /bin/sh abc -c 'HOME=/tmp npm install --omit=dev' && \
+  HOME=/tmp npm install --omit=dev && \
   echo "**** use distro onnxruntime for the discovery embedding runtime ****" && \
   if [ -d /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64 ]; then \
     rm -f \
@@ -51,7 +50,7 @@ RUN \
   npm link && \
   chmod +x /app/mstream/bin/rust-parser/* && \
   echo "**** bake the p2p discovery sidecar (manifest-pinned, sha256-verified) ****" && \
-  su -s /bin/sh abc -c 'HOME=/tmp node scripts/fetch-p2p-sidecar.mjs' && \
+  HOME=/tmp node scripts/fetch-p2p-sidecar.mjs && \
   printf "Linuxserver.io version: ${VERSION}\nBuild-date: ${BUILD_DATE}" > /build_version && \
   echo "**** cleanup ****" && \
   rm -rf \
