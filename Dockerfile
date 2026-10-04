@@ -38,6 +38,23 @@ RUN \
   cd /app/mstream && \
   chown -R abc:abc ./ && \
   su -s /bin/sh abc -c 'HOME=/tmp npm install --omit=dev' && \
+  echo "**** pair onnxruntime-node with the distro onnxruntime ****" && \
+  ORT_LIB=$(readlink -f /usr/lib/libonnxruntime.so.1) && \
+  ORT_DISTRO=${ORT_LIB##*libonnxruntime.so.} && \
+  ORT_BINDING=$(su -s /bin/sh abc -c 'HOME=/tmp npm view onnxruntime-node versions --json' | node -e ' \
+    const [major, minor] = process.argv[1].split(".").map(Number); \
+    const list = JSON.parse(require("fs").readFileSync(0, "utf8")); \
+    const fits = (Array.isArray(list) ? list : [list]) \
+      .map((v) => v.split(".")) \
+      .filter((p) => p.length === 3 && p.every((n) => /^[0-9]+$/.test(n))) \
+      .map((p) => p.map(Number)) \
+      .filter((v) => v[0] === major && v[1] <= minor) \
+      .sort((a, b) => a[1] - b[1] || a[2] - b[2]); \
+    if (!fits.length) { console.error("no stable onnxruntime-node release pairs with onnxruntime " + process.argv[1]); process.exit(1); } \
+    console.log(fits.pop().join(".")); \
+  ' "${ORT_DISTRO}") && \
+  echo "distro onnxruntime ${ORT_DISTRO} -> onnxruntime-node ${ORT_BINDING}" && \
+  su -s /bin/sh abc -c "HOME=/tmp npm install --omit=dev --no-save onnxruntime-node@${ORT_BINDING}" && \
   echo "**** use distro onnxruntime for the discovery embedding runtime ****" && \
   if [ -d /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/x64 ]; then \
     rm -f \
@@ -46,7 +63,17 @@ RUN \
       /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_tensorrt.so && \
     ln -s \
       /usr/lib/libonnxruntime.so.1 \
-      /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime.so.1; \
+      /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime.so.1 && \
+    echo "**** verify the native embedding runtime loads ****" && \
+    node -e ' \
+      import("onnxruntime-node").then(async (mod) => { \
+        const ort = mod.default && mod.default.InferenceSession ? mod.default : mod; \
+        const model = Uint8Array.from(Buffer.from("CAcSDW1zdHJlYW0tcHJvYmU6PwoUCgF4EgF5GgJpZCIISWRlbnRpdHkSBXByb2JlWg8KAXgSCgoICAESBAoCCAFiDwoBeRIKCggIARIECgIIAUIECgAQDQ==", "base64")); \
+        const session = await ort.InferenceSession.create(model, { intraOpNumThreads: 1 }); \
+        await session.release(); \
+        console.log("onnxruntime-node loads against the distro onnxruntime"); \
+      }).catch((err) => { console.error("onnxruntime-node does not load: " + err.message); process.exit(1); }); \
+    '; \
   fi && \
   npm link && \
   chmod +x /app/mstream/bin/rust-parser/* && \
