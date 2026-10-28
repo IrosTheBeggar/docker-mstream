@@ -39,13 +39,19 @@ RUN \
   HOME=/tmp npm install --omit=dev && \
   echo "**** use distro onnxruntime for the discovery embedding runtime ****" && \
   if [ -d /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64 ]; then \
+    ORT_VERSION=$(readlink -f /usr/lib/libonnxruntime.so.1) && \
+    ORT_VERSION=${ORT_VERSION##*.so.} && \
+    echo "**** pair onnxruntime-node with the distro onnxruntime ${ORT_VERSION} ****" && \
+    HOME=/tmp npm install --omit=dev --no-save "onnxruntime-node@<=${ORT_VERSION%.*}.x" && \
     rm -f \
       /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/libonnxruntime.so.1 \
       /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/libonnxruntime_providers_cuda.so \
       /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/libonnxruntime_providers_tensorrt.so && \
     ln -s \
       /usr/lib/libonnxruntime.so.1 \
-      /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/libonnxruntime.so.1; \
+      /app/mstream/node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/libonnxruntime.so.1 && \
+    echo "**** verify onnxruntime-node runs on the distro onnxruntime ****" && \
+    node -e 'const ort = require("onnxruntime-node"); ort.InferenceSession.create(Buffer.from("CAcSDW1zdHJlYW0tcHJvYmU6PwoUCgF4EgF5GgJpZCIISWRlbnRpdHkSBXByb2JlWg8KAXgSCgoICAESBAoCCAFiDwoBeRIKCggIARIECgIIAUIECgAQDQ==", "base64")).then(() => console.log("onnxruntime-node " + ort.env.versions.node + " OK"))'; \
   fi && \
   npm link && \
   chmod +x /app/mstream/bin/rust-parser/* && \
